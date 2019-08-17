@@ -1,0 +1,173 @@
+<link rel="stylesheet" type="text/css" href="style.css">
+<canvas id="canvas"></canvas>
+
+<!--Shaders for the background-->
+
+<script id="vertex-shader" type="notjs">
+	attribute vec4 a_position;
+
+	void main() {
+		gl_Position = a_position;
+	}
+</script>
+<script id="background-frag" type="notjs">
+ 	precision mediump float;
+
+	void main() {
+  		gl_FragColor = vec4(0, 0, 0, 1);
+	}
+</script>
+
+<!--Shaders for the Papiiiilon-->
+
+<script id="texture-vert" type="notjs">
+	attribute vec4 a_position;
+	attribute vec2 a_texcoord;
+	uniform mat4 u_mvp;
+	varying vec2 v_texcoord;
+	 
+	void main() {
+	 	gl_Position = u_mvp * a_position;	 
+	 	v_texcoord = a_texcoord;
+	}
+</script>
+
+
+<script id="rightWing-frag" type="notjs">
+	precision mediump float;
+
+	varying vec2 v_texcoord;
+
+	uniform float u_motifPow;
+	uniform float u_wingShapePow;
+	uniform vec2  u_motifOffset;
+	uniform vec2  u_motifNoiseOffset;
+	uniform vec3  u_baseColor;
+	uniform vec3  u_tacheColor;
+
+	uniform float u_alpha;
+	// Ceci est un librairie juste pour avoir une fonction qui génére de l'aléatoire mais qui dépend continument des paramètres qu'on lui donne
+	// C'est la base d'absolument toutes les oeuvres par programmation
+	// Longue vie au noise et à Ken Perlin :3
+	//
+	// Description : Array and textureless GLSL 2D simplex noise function.
+	//      Author : Ian McEwan, Ashima Arts.
+	//  Maintainer : ijm
+	//     Lastmod : 20110822 (ijm)
+	//     License : Copyright (C) 2011 Ashima Arts. All rights reserved.
+	//               Distributed under the MIT License. See LICENSE file.
+	//               https://github.com/ashima/webgl-noise
+	//
+
+	vec3 mod289(vec3 x) {
+	  return x - floor(x * (1.0 / 289.0)) * 289.0;
+	}
+
+	vec2 mod289(vec2 x) {
+	  return x - floor(x * (1.0 / 289.0)) * 289.0;
+	}
+
+	vec3 permute(vec3 x) {
+	  return mod289(((x*34.0)+1.0)*x);
+	}
+
+	float snoise(vec2 v)
+	  {
+	  const vec4 C = vec4(0.211324865405187,  // (3.0-sqrt(3.0))/6.0
+	                      0.366025403784439,  // 0.5*(sqrt(3.0)-1.0)
+	                     -0.577350269189626,  // -1.0 + 2.0 * C.x
+	                      0.024390243902439); // 1.0 / 41.0
+	// First corner
+	  vec2 i  = floor(v + dot(v, C.yy) );
+	  vec2 x0 = v -   i + dot(i, C.xx);
+
+	// Other corners
+	  vec2 i1;
+	  //i1.x = step( x0.y, x0.x ); // x0.x > x0.y ? 1.0 : 0.0
+	  //i1.y = 1.0 - i1.x;
+	  i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+	  // x0 = x0 - 0.0 + 0.0 * C.xx ;
+	  // x1 = x0 - i1 + 1.0 * C.xx ;
+	  // x2 = x0 - 1.0 + 2.0 * C.xx ;
+	  vec4 x12 = x0.xyxy + C.xxzz;
+	  x12.xy -= i1;
+
+	// Permutations
+	  i = mod289(i); // Avoid truncation effects in permutation
+	  vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 ))
+	    + i.x + vec3(0.0, i1.x, 1.0 ));
+
+	  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+	  m = m*m ;
+	  m = m*m ;
+
+	// Gradients: 41 points uniformly over a line, mapped onto a diamond.
+	// The ring size 17*17 = 289 is close to a multiple of 41 (41*7 = 287)
+
+	  vec3 x = 2.0 * fract(p * C.www) - 1.0;
+	  vec3 h = abs(x) - 0.5;
+	  vec3 ox = floor(x + 0.5);
+	  vec3 a0 = x - ox;
+
+	// Normalise gradients implicitly by scaling m
+	// Approximation of: m *= inversesqrt( a0*a0 + h*h );
+	  m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+
+	// Compute final noise value at P
+	  vec3 g;
+	  g.x  = a0.x  * x0.x  + h.x  * x0.y;
+	  g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+	  return 130.0 * dot(m, g);
+	}
+
+	/*--------------------Début du vrai code---------------------------------------------------------------------------------*/
+
+	float rect(vec2 pos, float w, float h, float margin){
+	    return 1. - smoothstep(1.-margin,1.+margin,max(abs(pos.x/w*2.),abs(pos.y/h*2.)));
+	}
+
+	float motif(vec2 pos, float w, float h){
+	    pos = vec2(u_motifOffset) - pos ;
+	    pos += snoise(pos*8.348+vec2(u_motifNoiseOffset) );
+	    float motif = rect(pos-vec2(w/2.,0.),w,h,1.);
+	    //wing *= pos.x/w*1.432;
+	    return pow(motif,3.032) ;
+	}
+
+	vec4 aileDroiteDePapillon(vec2 pos, float w, float h){
+	    //pos += snoise(pos*10.828+vec2(0.180,0.280) );
+	    //pos.y -= pos.x*sin(u_time*0.7);
+	    float wingShape;
+	    if(pos.x < 0.0000000001){
+	    	wingShape = 0.;
+		}
+		else{
+		    pos.y /= 1.600*pow(pos.x,0.204);
+		    pos.x += snoise(pos*5.556)*0.020;
+		    wingShape = rect(pos-vec2(w/2.,0.),w,h,0.114);
+		}
+	    //wing -= motif(pos,w,h);
+	    //wing *= pos.x/w*1.432;
+	    vec3 color = wingShape * u_baseColor;
+	    color = mix(color,u_tacheColor,pow(motif(pos,w,h),u_motifPow)*pow(wingShape,u_wingShapePow));
+	    return vec4(color,wingShape) ;
+	}
+
+	void main() {  
+	    vec2 pos = v_texcoord;
+	    pos.y -= 0.5;
+	    
+	    float wingW = 0.400;
+	    float wingH = 0.612;
+
+	    gl_FragColor = aileDroiteDePapillon(pos,wingW,wingH);
+	    gl_FragColor.a = smoothstep(0.0,0.01,gl_FragColor.a) * u_alpha;
+	}
+</script>
+
+<script src="https://webglfundamentals.org/webgl/resources/m4.js"></script>
+<script src="noise.js"></script> <!--Tiens tiens, encore le 'noise', pour js cette fois. Quand je dis qu'il est partout ^^-->
+<script src="mathsAndStuffs.js"></script>
+<script src="papillon.js"></script>
+<script src="targetPositions.js"></script>
+<script src="cadeauPour.js"></script>
